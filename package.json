@@ -9,6 +9,7 @@
     "build": "tsc",
     "clean": "rimraf dist",
     "import-csv": "ts-node scripts/importCodesFromCSV.ts",
+    "convert-xlsx": "python scripts/xlsxToCodesCsv.py",
     "insert-test": "ts-node scripts/insertTestCodes.ts",
     "set-admin": "ts-node scripts/setAdmin.ts",
     "test:race": "ts-node scripts/testSubmitRace.ts"
