@@ -1,19 +1,13 @@
 /**
  * Batched crown-code importer.
  *
- * Use AFTER deploy (production Mongo) for real codes, or locally for testing.
- * Imports in STEPS — not all 294k at once. Safe to re-run (duplicates skipped).
+ * Dry run (no DB writes):
+ *   npm run import-csv -- "./data/crown-codes-grand-prize.csv" --dry-run
  *
- * Steps:
- *   1) Convert Excel → codes CSV (see scripts/xlsxToCodesCsv.py)
- *   2) Point backend/.env MONGODB_URI at the DB you want (local OR production)
- *   3) Run batches, e.g.:
- *        npm run import-csv -- "D:/path/codes.csv" --batch-size 5000
- *      Or one step only:
- *        npm run import-csv -- "D:/path/codes.csv" --batch-size 5000 --from 0 --limit 5000
- *        npm run import-csv -- "D:/path/codes.csv" --batch-size 5000 --from 5000 --limit 5000
+ * Import ALL codes in 5,000-row steps (one process, progress after each chunk):
+ *   npm run import-csv -- "./data/crown-codes-grand-prize.csv" --batch-size 5000 --reset --batch utc-crowns-2026
  *
- * Progress is saved to .import-codes-progress.json so you can stop and continue.
+ * File duplicates are dropped before insert. DB duplicates are skipped (unique index).
  */
 import fs from 'fs';
 import path from 'path';
@@ -31,6 +25,8 @@ type Args = {
   from: number;
   limit?: number;
   once: boolean;
+  dryRun: boolean;
+  reset: boolean;
 };
 
 const progressPath = path.join(__dirname, '.import-codes-progress.json');
@@ -57,6 +53,8 @@ const parseArgs = (): Args => {
     from: getNum('--from', -1),
     limit: argv.includes('--limit') ? getNum('--limit', 5000) : undefined,
     once: has('--once') || argv.includes('--limit'),
+    dryRun: has('--dry-run'),
+    reset: has('--reset'),
   };
 };
 
@@ -86,22 +84,60 @@ const saveProgress = (file: string, nextIndex: number, total: number) => {
   );
 };
 
+const scanFileDuplicates = (raw: string) => {
+  const seen = new Map<string, number>();
+  let invalid = 0;
+  for (const line of raw.split(/\r?\n/)) {
+    const value = line.split(',')[0]?.trim().replace(/^"|"$/g, '').toUpperCase();
+    if (!value || value === 'CODE' || value === 'CODES') continue;
+    if (!/^[A-Z0-9-]{4,32}$/.test(value)) {
+      invalid += 1;
+      continue;
+    }
+    seen.set(value, (seen.get(value) || 0) + 1);
+  }
+  const duplicateValues = [...seen.entries()].filter(([, n]) => n > 1);
+  const extraCopies = duplicateValues.reduce((sum, [, n]) => sum + (n - 1), 0);
+  return {
+    rawValid: [...seen.values()].reduce((sum, n) => sum + n, 0),
+    unique: seen.size,
+    extraCopies,
+    duplicateExamples: duplicateValues.slice(0, 8).map(([code, n]) => `${code}×${n}`),
+    invalid,
+  };
+};
+
+const bulkStats = (err: unknown, chunkLen: number) => {
+  const e = err as {
+    message?: string;
+    code?: number;
+    insertedDocs?: unknown[];
+    result?: { nInserted?: number; insertedCount?: number };
+    writeErrors?: Array<{ code?: number; errmsg?: string; index?: number }>;
+  };
+  const inserted = e.insertedDocs?.length ?? e.result?.nInserted ?? e.result?.insertedCount ?? 0;
+  const writeErrors = e.writeErrors ?? [];
+  const dupes = writeErrors.filter((w) => w.code === 11000).length;
+  const other = writeErrors.filter((w) => w.code !== 11000);
+  return {
+    inserted,
+    skipped: Math.max(0, chunkLen - inserted),
+    dupes,
+    other,
+    message: e.message || String(err),
+  };
+};
+
 const run = async () => {
   const args = parseArgs();
   if (!args.file) {
     console.error(`
 Usage:
-  npm run import-csv -- <codes.csv> [--batch-size 5000] [--from 0] [--limit 5000] [--batch name] [--once]
+  npm run import-csv -- <codes.csv> [--dry-run] [--reset] [--batch-size 5000] [--batch name]
 
-Examples (steps):
-  npm run import-csv -- ./data/codes.csv --batch-size 5000 --from 0 --limit 5000
-  npm run import-csv -- ./data/codes.csv --batch-size 5000 --from 5000 --limit 5000
-
-Auto continue from last progress (still in chunks of batch-size):
-  npm run import-csv -- ./data/codes.csv --batch-size 5000
-
-One chunk then stop (uses saved progress if --from omitted):
-  npm run import-csv -- ./data/codes.csv --batch-size 5000 --once
+Examples:
+  npm run import-csv -- ./data/codes.csv --dry-run
+  npm run import-csv -- ./data/codes.csv --batch-size 5000 --reset --batch utc-crowns-2026
 `);
     process.exit(1);
   }
@@ -118,41 +154,73 @@ One chunk then stop (uses saved progress if --from omitted):
     process.exit(1);
   }
 
+  const content = fs.readFileSync(abs, 'utf8');
+  const fileScan = scanFileDuplicates(content);
+  const codes = parseCodesFromCsv(content);
+
   console.log(`DB: ${mongo.replace(/\/\/.*@/, '//***@')}`);
   console.log(`File: ${abs}`);
+  console.log(`Mode: ${args.dryRun ? 'DRY RUN' : 'IMPORT'}`);
   console.log(`Batch name: ${args.batchName}`);
   console.log(`Chunk size: ${args.batchSize}`);
-
-  const content = fs.readFileSync(abs, 'utf8');
-  const codes = parseCodesFromCsv(content);
-  console.log(`Parsed ${codes.length} unique valid codes from file`);
+  console.log('\nFile scan');
+  console.log(`  raw valid rows: ${fileScan.rawValid}`);
+  console.log(`  unique codes:   ${fileScan.unique}`);
+  console.log(`  extra copies dropped: ${fileScan.extraCopies}`);
+  console.log(`  invalid rows skipped: ${fileScan.invalid}`);
+  if (fileScan.duplicateExamples.length) {
+    console.log(`  dupe examples: ${fileScan.duplicateExamples.join(', ')}`);
+  }
+  console.log(`  parsed unique for import: ${codes.length}`);
 
   if (!codes.length) {
     console.error('No codes found. Export GRAND PRIZE ENTRY codes only.');
     process.exit(1);
   }
 
+  if (args.reset) {
+    try {
+      fs.unlinkSync(progressPath);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  await mongoose.connect(mongo);
+  const existing = await CampaignCode.countDocuments();
+  console.log(`\nDB currently has ${existing} CampaignCode rows`);
+
+  if (args.dryRun) {
+    const steps = Math.ceil(codes.length / args.batchSize);
+    console.log(`Would import ${codes.length} unique codes in ${steps} steps of ${args.batchSize}.`);
+    console.log('No writes performed.');
+    await mongoose.disconnect();
+    return;
+  }
+
   let index = args.from >= 0 ? args.from : loadProgress(abs);
   if (args.limit != null && args.from >= 0) {
-    // explicit window: from → from+limit
     args.batchSize = args.limit;
     args.once = true;
   }
   if (index >= codes.length) {
-    console.log(`Already complete (next index ${index} >= ${codes.length}). Delete ${progressPath} to restart.`);
+    console.log(`Already complete (next index ${index} >= ${codes.length}). Use --reset to start over.`);
+    await mongoose.disconnect();
     process.exit(0);
   }
 
-  await mongoose.connect(mongo);
-  console.log('Connected.');
+  console.log(`Starting at index ${index}`);
 
   let totalInserted = 0;
   let totalSkipped = 0;
+  let step = 0;
+  const fatal: string[] = [];
 
   while (index < codes.length) {
     const sliceEnd = Math.min(index + args.batchSize, codes.length);
     const chunk = codes.slice(index, sliceEnd);
     if (!chunk.length) break;
+    step += 1;
 
     const docs = chunk.map((code) => ({
       code,
@@ -167,9 +235,25 @@ One chunk then stop (uses saved progress if --from omitted):
       const result = await CampaignCode.insertMany(docs, { ordered: false });
       inserted = result.length;
     } catch (err: unknown) {
-      const e = err as { insertedDocs?: unknown[]; result?: { nInserted?: number } };
-      inserted = e.insertedDocs?.length ?? e.result?.nInserted ?? 0;
-      skipped = chunk.length - inserted;
+      const stats = bulkStats(err, chunk.length);
+      inserted = stats.inserted;
+      skipped = stats.skipped;
+      if (stats.other.length) {
+        const detail = stats.other
+          .slice(0, 3)
+          .map((w) => `#${w.index} ${w.code} ${w.errmsg}`)
+          .join(' | ');
+        const msg = `Chunk ${index}-${sliceEnd} non-duplicate errors (${stats.other.length}): ${detail || stats.message}`;
+        console.error(msg);
+        fatal.push(msg);
+        break;
+      }
+      if (inserted === 0 && stats.dupes === 0) {
+        const msg = `Chunk ${index}-${sliceEnd} failed with no inserts: ${stats.message}`;
+        console.error(msg);
+        fatal.push(msg);
+        break;
+      }
     }
 
     totalInserted += inserted;
@@ -178,21 +262,28 @@ One chunk then stop (uses saved progress if --from omitted):
     saveProgress(abs, index, codes.length);
 
     console.log(
-      `Chunk done: +${inserted} inserted, ${skipped} skipped/dupes | progress ${index}/${codes.length} (${((index / codes.length) * 100).toFixed(1)}%)`
+      `Step ${step}: +${inserted} inserted, ${skipped} skipped/dupes | ${index}/${codes.length} (${((index / codes.length) * 100).toFixed(1)}%)`
     );
 
-    // Always stop after one chunk when --once or --limit (limit = treat as one step size override)
     if (args.once) break;
-    if (args.limit != null) break;
   }
 
   const remaining = codes.length - index;
+  const dbTotal = await CampaignCode.countDocuments();
   console.log(`\nSession: inserted ${totalInserted}, skipped ${totalSkipped}`);
   console.log(`Overall: ${index}/${codes.length} processed, ${remaining} left`);
+  console.log(`DB CampaignCode total: ${dbTotal}`);
+
+  if (fatal.length) {
+    console.error('\nStopped on error. Re-run without --reset to continue from last progress.');
+    await mongoose.disconnect();
+    process.exit(1);
+  }
+
   if (remaining > 0) {
-    console.log(`Next step:\n  npm run import-csv -- "${abs}" --batch-size ${args.batchSize} --once`);
+    console.log(`Next step:\n  npm run import-csv -- "${abs}" --batch-size ${args.batchSize}`);
   } else {
-    console.log('All codes from this file are processed.');
+    console.log('All unique codes from this file are processed.');
     try {
       fs.unlinkSync(progressPath);
     } catch {

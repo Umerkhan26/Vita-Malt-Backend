@@ -21,7 +21,7 @@ const pageMeta = (page: number, limit: number, totalCount: number) => ({
 
 export const listEntrants = async (
   page = 1,
-  limit = 25,
+  limit = 100,
   search = '',
   accountType = '',
   status = '',
@@ -140,7 +140,7 @@ export const codeStats = async () => {
   };
 };
 
-export const listCodes = async (page = 1, limit = 25, search = '', status = '') => {
+export const listCodes = async (page = 1, limit = 100, search = '', status = '') => {
   const filter: Record<string, unknown> = {};
   if (status) filter.status = status;
   if (search) {
@@ -162,7 +162,7 @@ export const listCodes = async (page = 1, limit = 25, search = '', status = '') 
   return { items, ...pageMeta(page, limit, totalCount) };
 };
 
-export const listSubmissions = async (page = 1, limit = 25, result?: string, search = '') => {
+export const listSubmissions = async (page = 1, limit = 100, result?: string, search = '') => {
   const filter: Record<string, unknown> = {};
   if (result) filter.result = result;
   if (search) filter.codeAttempted = { $regex: search, $options: 'i' };
@@ -178,7 +178,7 @@ export const listSubmissions = async (page = 1, limit = 25, result?: string, sea
   return { items, ...pageMeta(page, limit, totalCount) };
 };
 
-export const flaggedCodes = async (page = 1, limit = 25, search = '', kind = '') => {
+export const flaggedCodes = async (page = 1, limit = 100, search = '', kind = '') => {
   const filter: Record<string, unknown> =
     kind === 'flagged'
       ? { status: 'flagged' }
@@ -298,7 +298,7 @@ export const deleteWinner = async (winnerId: string) => {
 
 export const listWinnersAdmin = async (
   page = 1,
-  limit = 25,
+  limit = 100,
   search = '',
   status = '',
   tier = ''
@@ -321,7 +321,7 @@ export const listWinnersAdmin = async (
   return { items, ...pageMeta(page, limit, totalCount) };
 };
 
-export const listContactMessages = async (page = 1, limit = 25, search = '', unreadOnly = false) => {
+export const listContactMessages = async (page = 1, limit = 100, search = '', unreadOnly = false) => {
   const filter: Record<string, unknown> = {};
   if (unreadOnly) filter.isRead = false;
   if (search) {
@@ -342,7 +342,7 @@ export const listContactMessages = async (page = 1, limit = 25, search = '', unr
 export const markContactRead = async (id: string) =>
   ContactMessage.findByIdAndUpdate(id, { isRead: true }, { new: true });
 
-export const listSocialPostsAdmin = async (page = 1, limit = 25, search = '', platform = '') => {
+export const listSocialPostsAdmin = async (page = 1, limit = 100, search = '', platform = '') => {
   const filter: Record<string, unknown> = {};
   if (platform) filter.platform = platform;
   if (search) {
@@ -385,6 +385,7 @@ export const uploadsDir = () => {
 
 export const overviewStats = async () => {
   const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const since7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
   const [
     entrants,
     accounts,
@@ -395,6 +396,9 @@ export const overviewStats = async () => {
     submissions24h,
     success24h,
     duplicate24h,
+    invalid24h,
+    submissions7d,
+    submissionsTotal,
     drawEntries,
     publishedWinners,
     pendingWinners,
@@ -402,6 +406,7 @@ export const overviewStats = async () => {
     recentSubmissions,
     topEntrants,
     guests,
+    recentWinners,
   ] = await Promise.all([
     Entrant.countDocuments({ role: 'user' }),
     Entrant.countDocuments({ role: 'user', hasAccount: true }),
@@ -412,6 +417,9 @@ export const overviewStats = async () => {
     CodeSubmission.countDocuments({ createdAt: { $gte: since24h } }),
     CodeSubmission.countDocuments({ createdAt: { $gte: since24h }, result: 'success' }),
     CodeSubmission.countDocuments({ createdAt: { $gte: since24h }, result: 'duplicate' }),
+    CodeSubmission.countDocuments({ createdAt: { $gte: since24h }, result: 'invalid' }),
+    CodeSubmission.countDocuments({ createdAt: { $gte: since7d } }),
+    CodeSubmission.countDocuments(),
     DrawEntry.countDocuments(),
     Winner.countDocuments({ status: 'published' }),
     Winner.countDocuments({ status: 'pending_verification' }),
@@ -423,32 +431,42 @@ export const overviewStats = async () => {
       .select('fullName phone validCodeCount drawEntryCount hasAccount pendingCodeIds')
       .lean(),
     Entrant.countDocuments({ role: 'user', hasAccount: false }),
+    Winner.find().sort({ createdAt: -1 }).limit(5).select('displayName prizeLabel tier status createdAt').lean(),
   ]);
+
+  const start = process.env.CAMPAIGN_START || '2026-09-18';
+  const end = process.env.CAMPAIGN_END || '2026-11-20';
+  const usedPercent = codes ? Math.round((usedCodes / codes) * 1000) / 10 : 0;
 
   return {
     entrants,
     accounts,
     guests,
-    codes: { total: codes, unused: unusedCodes, used: usedCodes, flagged },
-    submissions24h: { total: submissions24h, success: success24h, duplicate: duplicate24h },
+    codes: { total: codes, unused: unusedCodes, used: usedCodes, flagged, usedPercent },
+    submissions24h: { total: submissions24h, success: success24h, duplicate: duplicate24h, invalid: invalid24h },
+    submissions7d,
+    submissionsTotal,
     drawEntries,
+    expectedTickets: Math.floor(usedCodes / 4),
+    leftoverCodes: usedCodes % 4,
     winners: { published: publishedWinners, pending: pendingWinners },
     unreadMessages,
     recentSubmissions,
+    recentWinners,
     topEntrants: topEntrants.map((e, i) => ({
       ...e,
       rank: i + 1,
       pendingTowardNext: Array.isArray(e.pendingCodeIds) ? e.pendingCodeIds.length : 0,
     })),
     campaign: {
-      start: process.env.CAMPAIGN_START || '2026-09-18',
-      end: process.env.CAMPAIGN_END || '2026-11-20',
+      start,
+      end,
       draw: '2026-11-23',
     },
   };
 };
 
-export const listAuditLogs = async (page = 1, limit = 30, search = '', actorType = '') => {
+export const listAuditLogs = async (page = 1, limit = 100, search = '', actorType = '') => {
   const filter: Record<string, unknown> = {};
   if (actorType === 'admin' || actorType === 'system' || actorType === 'entrant') {
     filter.actorType = actorType;
@@ -616,7 +634,7 @@ export const drawPoolPreview = async () => {
 
 export const listDrawEntries = async (
   page = 1,
-  limit = 25,
+  limit = 100,
   search = '',
   winnerFilter = ''
 ) => {

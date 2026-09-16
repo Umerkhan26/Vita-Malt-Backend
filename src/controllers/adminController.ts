@@ -9,12 +9,18 @@ const handleError = (res: Response, error: unknown) => {
   res.status(err.status || 500).json({ message: err.message || 'Server error' });
 };
 
+const pageLimit = (req: AuthRequest, fallback = 100) => {
+  const n = Number(req.query.limit);
+  if (!Number.isFinite(n) || n < 1) return fallback;
+  return Math.min(Math.floor(n), 200);
+};
+
 const param = (value: string | string[] | undefined): string => (Array.isArray(value) ? value[0] : value || '');
 
 export const entrantsHandler = async (req: AuthRequest, res: Response) => {
   try {
     const page = Number(req.query.page) || 1;
-    const limit = Number(req.query.limit) || 25;
+    const limit = pageLimit(req);
     const search = String(req.query.search || '');
     const accountType = String(req.query.accountType || '');
     const status = String(req.query.status || '');
@@ -87,7 +93,7 @@ export const submissionsHandler = async (req: AuthRequest, res: Response) => {
     res.json(
       await adminService.listSubmissions(
         Number(req.query.page) || 1,
-        Number(req.query.limit) || 25,
+        pageLimit(req),
         req.query.result as string | undefined,
         String(req.query.search || '')
       )
@@ -102,7 +108,7 @@ export const flaggedHandler = async (req: AuthRequest, res: Response) => {
     res.json(
       await adminService.flaggedCodes(
         Number(req.query.page) || 1,
-        Number(req.query.limit) || 25,
+        pageLimit(req),
         String(req.query.search || ''),
         String(req.query.kind || '')
       )
@@ -177,7 +183,7 @@ export const listWinnersHandler = async (req: AuthRequest, res: Response) => {
     res.json(
       await adminService.listWinnersAdmin(
         Number(req.query.page) || 1,
-        Number(req.query.limit) || 25,
+        pageLimit(req),
         String(req.query.search || ''),
         String(req.query.status || ''),
         String(req.query.tier || '')
@@ -216,7 +222,7 @@ export const contactListHandler = async (req: AuthRequest, res: Response) => {
     res.json(
       await adminService.listContactMessages(
         Number(req.query.page) || 1,
-        Number(req.query.limit) || 25,
+        pageLimit(req),
         String(req.query.search || ''),
         String(req.query.unread || '') === '1' || String(req.query.unread || '') === 'true'
       )
@@ -239,7 +245,7 @@ export const socialListHandler = async (req: AuthRequest, res: Response) => {
     res.json(
       await adminService.listSocialPostsAdmin(
         Number(req.query.page) || 1,
-        Number(req.query.limit) || 25,
+        pageLimit(req),
         String(req.query.search || ''),
         String(req.query.platform || '')
       )
@@ -287,7 +293,7 @@ export const auditHandler = async (req: AuthRequest, res: Response) => {
     res.json(
       await adminService.listAuditLogs(
         Number(req.query.page) || 1,
-        Number(req.query.limit) || 30,
+        pageLimit(req),
         String(req.query.search || ''),
         String(req.query.actorType || '')
       )
@@ -310,7 +316,7 @@ export const drawEntriesHandler = async (req: AuthRequest, res: Response) => {
     res.json(
       await adminService.listDrawEntries(
         Number(req.query.page) || 1,
-        Number(req.query.limit) || 25,
+        pageLimit(req),
         String(req.query.search || ''),
         String(req.query.winner || '')
       )
@@ -325,7 +331,7 @@ export const listCodesHandler = async (req: AuthRequest, res: Response) => {
     res.json(
       await adminService.listCodes(
         Number(req.query.page) || 1,
-        Number(req.query.limit) || 25,
+        pageLimit(req),
         String(req.query.search || ''),
         String(req.query.status || '')
       )
