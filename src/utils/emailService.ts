@@ -1,15 +1,18 @@
-import nodemailer from 'nodemailer';
+import nodemailer from "nodemailer";
 
-const smtpUser = () => (process.env.SMTP_USER || process.env.EMAIL_USER || '').trim();
+const smtpUser = () =>
+  (process.env.SMTP_USER || process.env.EMAIL_USER || "").trim();
 /** Gmail app passwords are often copied with spaces — strip them. */
 const smtpPass = () =>
-  (process.env.SMTP_PASS || process.env.EMAIL_PASS || '').replace(/\s+/g, '').trim();
+  (process.env.SMTP_PASS || process.env.EMAIL_PASS || "")
+    .replace(/\s+/g, "")
+    .trim();
 const hasSmtp = () => Boolean(smtpUser() && smtpPass());
 
 const getTransporter = () =>
   nodemailer.createTransport({
-    service: 'gmail',
-    host: process.env.SMTP_HOST || 'smtp.gmail.com',
+    service: "gmail",
+    host: process.env.SMTP_HOST || "smtp.gmail.com",
     port: Number(process.env.SMTP_PORT || 587),
     secure: false,
     requireTLS: true,
@@ -19,18 +22,22 @@ const getTransporter = () =>
     },
   });
 
-const fromAddress = () => process.env.EMAIL_FROM || process.env.SMTP_FROM || smtpUser();
+const fromAddress = () =>
+  process.env.EMAIL_FROM || process.env.SMTP_FROM || smtpUser();
 
 export const generateOTP = (length: number = 6): string => {
-  const digits = '0123456789';
-  let otp = '';
+  const digits = "0123456789";
+  let otp = "";
   for (let i = 0; i < length; i++) {
     otp += digits[Math.floor(Math.random() * 10)];
   }
   return otp;
 };
 
-export const buildWelcomeEmailHtml = (name: string, landingUrl: string = 'https://vitamalt.com'): string => `
+export const buildWelcomeEmailHtml = (
+  name: string,
+  landingUrl: string = "https://vitamalt.com",
+): string => `
   <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f6f9f7; border-radius: 18px; overflow: hidden; border: 1px solid #dfeee6;">
     <div style="background: linear-gradient(135deg, #006B3F 0%, #0b7d52 100%); padding: 28px 24px; text-align: center;">
       <div style="display: inline-block; background: rgba(255,255,255,0.12); padding: 8px 14px; border-radius: 999px; color: #dff9eb; font-size: 12px; letter-spacing: 1.2px; text-transform: uppercase; font-weight: 700;">Welcome aboard</div>
@@ -76,34 +83,51 @@ const wrapHtml = (title: string, body: string): string => `
   </div>
 `;
 
-export const sendMail = async (to: string, subject: string, text: string, html: string): Promise<boolean> => {
+export const sendMail = async (
+  to: string,
+  subject: string,
+  text: string,
+  html: string,
+): Promise<boolean> => {
   if (!hasSmtp()) {
-    console.warn(`[EMAIL SKIPPED] SMTP not configured. Subject="${subject}" To=${to}`);
+    console.warn(
+      `[EMAIL SKIPPED] SMTP not configured. Subject="${subject}" To=${to}`,
+    );
     console.warn(text);
     return false;
   }
   try {
-    await getTransporter().sendMail({ from: fromAddress(), to, subject, text, html });
+    await getTransporter().sendMail({
+      from: fromAddress(),
+      to,
+      subject,
+      text,
+      html,
+    });
     console.log(`[EMAIL SENT] ${subject} -> ${to}`);
     return true;
   } catch (error) {
-    console.error('[EMAIL FAILED]', error);
+    console.error("[EMAIL FAILED]", error);
     return false;
   }
 };
 
-export const sendOTPEmail = async (email: string, otp: string, name: string): Promise<{ sent: boolean }> => {
+export const sendOTPEmail = async (
+  email: string,
+  otp: string,
+  name: string,
+): Promise<{ sent: boolean }> => {
   const text = `Hello ${name},\n\nYour verification code is: ${otp}\n\nThis code expires in 10 minutes.`;
   const sent = await sendMail(
     email,
-    'Your Vita Malt verification code',
+    "Your Vita Malt verification code",
     text,
     wrapHtml(
-      'Verify your email',
+      "Verify your email",
       `<p>Hello ${name},</p><p>Use this code to verify your Vita Malt account:</p>
        <div style="background:#e8f6ee;border:2px dashed #006B3F;border-radius:8px;padding:16px;text-align:center;font-size:32px;letter-spacing:8px;color:#006B3F;font-weight:bold;">${otp}</div>
-       <p>This code expires in <strong>10 minutes</strong>.</p>`
-    )
+       <p>This code expires in <strong>10 minutes</strong>.</p>`,
+    ),
   );
   if (!sent) {
     console.log(`[DEV OTP] ${email} => ${otp}`);
@@ -114,19 +138,19 @@ export const sendOTPEmail = async (email: string, otp: string, name: string): Pr
 export const sendPasswordResetOtpEmail = async (
   email: string,
   otp: string,
-  name: string
+  name: string,
 ): Promise<{ sent: boolean }> => {
   const text = `Hello ${name},\n\nYour password reset code is: ${otp}\n\nThis code expires in 10 minutes.`;
   const sent = await sendMail(
     email,
-    'Your Vita Malt password reset code',
+    "Your Vita Malt password reset code",
     text,
     wrapHtml(
-      'Password reset code',
+      "Password reset code",
       `<p>Hello ${name},</p><p>Use this code to reset your Vita Malt account password:</p>
        <div style="background:#e8f6ee;border:2px dashed #006B3F;border-radius:8px;padding:16px;text-align:center;font-size:32px;letter-spacing:8px;color:#006B3F;font-weight:bold;">${otp}</div>
-       <p>This code expires in <strong>10 minutes</strong>. If you did not request this, ignore this email.</p>`
-    )
+       <p>This code expires in <strong>10 minutes</strong>. If you did not request this, ignore this email.</p>`,
+    ),
   );
   if (!sent) {
     console.log(`[DEV RESET OTP] ${email} => ${otp}`);
@@ -137,19 +161,19 @@ export const sendPasswordResetOtpEmail = async (
 export const sendPasswordResetEmail = async (
   email: string,
   resetUrl: string,
-  name: string
+  name: string,
 ): Promise<{ sent: boolean }> => {
   const text = `Hello ${name},\n\nReset your password: ${resetUrl}\n\nThis link expires in 30 minutes.`;
   const sent = await sendMail(
     email,
-    'Reset your Vita Malt password',
+    "Reset your Vita Malt password",
     text,
     wrapHtml(
-      'Password reset',
+      "Password reset",
       `<p>Hello ${name},</p><p>Click the button below to set a new password.</p>
        <p style="text-align:center;margin:24px 0;"><a href="${resetUrl}" style="background:#F37021;color:#fff;padding:12px 20px;border-radius:6px;text-decoration:none;font-weight:bold;">Reset password</a></p>
-       <p>This link expires in 30 minutes. If you did not request this, ignore this email.</p>`
-    )
+       <p>This link expires in 30 minutes. If you did not request this, ignore this email.</p>`,
+    ),
   );
   if (!sent) {
     console.log(`[DEV RESET LINK] ${email} => ${resetUrl}`);
@@ -157,13 +181,16 @@ export const sendPasswordResetEmail = async (
   return { sent };
 };
 
-export const sendWelcomeEmail = async (email: string, name: string): Promise<{ sent: boolean }> => {
+export const sendWelcomeEmail = async (
+  email: string,
+  name: string,
+): Promise<{ sent: boolean }> => {
   const text = `Hello ${name},\n\nWelcome to Vita Malt! We’re so happy you joined the campaign.\n\nStart exploring the latest offers, enter your codes, and keep an eye on your inbox for updates and prize announcements.\n\nhttps://vitamalt.com`;
   const sent = await sendMail(
     email,
-    'Welcome to Vita Malt',
+    "Welcome to Vita Malt",
     text,
-    buildWelcomeEmailHtml(name, 'https://vitamalt.com')
+    buildWelcomeEmailHtml(name, "https://vitamalt.com"),
   );
   if (!sent) {
     console.log(`[DEV WELCOME] ${email} => welcome email`);
@@ -175,17 +202,17 @@ export const sendWinnerEmail = async (
   email: string,
   name: string,
   tier: string,
-  prizeLabel: string
+  prizeLabel: string,
 ): Promise<void> => {
   await sendMail(
     email,
     `Congratulations — Vita Malt ${tier} prize`,
     `Hello ${name},\n\nYou have been selected as a ${tier} winner for: ${prizeLabel}.\nSVBL will contact you to verify eligibility and arrange fulfillment.`,
     wrapHtml(
-      'You are a winner!',
+      "You are a winner!",
       `<p>Hello ${name},</p><p>You have been selected as a <strong>${tier}</strong> winner.</p>
        <p>Prize: <strong>${prizeLabel}</strong></p>
-       <p>SVBL will contact you to verify eligibility (18+) and arrange prize fulfillment.</p>`
-    )
+       <p>SVBL will contact you to verify eligibility (18+) and arrange prize fulfillment.</p>`,
+    ),
   );
 };

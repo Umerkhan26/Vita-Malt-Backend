@@ -1,14 +1,26 @@
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
-import Entrant, { IEntrant } from '../models/entrant.model';
-import { getJwtSecret, validateEmail, validateName, validatePassword } from '../utils/validators';
-import { normalizePhone, validatePhone } from '../utils/phone';
-import { isAtLeast18 } from '../utils/age';
-import { generateOTP, sendOTPEmail, sendPasswordResetOtpEmail, sendWelcomeEmail } from '../utils/emailService';
-import { writeAudit } from '../utils/audit';
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
+import Entrant, { IEntrant } from "../models/entrant.model";
+import {
+  getJwtSecret,
+  validateEmail,
+  validateName,
+  validatePassword,
+} from "../utils/validators";
+import { normalizePhone, validatePhone } from "../utils/phone";
+import { isAtLeast18 } from "../utils/age";
+import {
+  generateOTP,
+  sendOTPEmail,
+  sendPasswordResetOtpEmail,
+  sendWelcomeEmail,
+} from "../utils/emailService";
+import { writeAudit } from "../utils/audit";
 
 const signToken = (userId: string, role: string, fullName: string) =>
-  jwt.sign({ userId, role, username: fullName }, getJwtSecret(), { expiresIn: '7d' });
+  jwt.sign({ userId, role, username: fullName }, getJwtSecret(), {
+    expiresIn: "7d",
+  });
 
 const publicEntrant = (entrant: {
   _id: { toString(): string };
@@ -40,23 +52,38 @@ export const registerEntrant = async (params: {
 }) => {
   assertGuestIdentity({ ...params, isNew: true });
   if (!params.email || !validateEmail(params.email)) {
-    throw Object.assign(new Error('Valid email is required to sign up'), { status: 400 });
-  }
-  if (!validatePassword(params.password)) {
-    throw Object.assign(new Error('Password must be 8+ chars with a letter, number, and special character'), {
+    throw Object.assign(new Error("Valid email is required to sign up"), {
       status: 400,
     });
+  }
+  if (!validatePassword(params.password)) {
+    throw Object.assign(
+      new Error(
+        "Password must be 8+ chars with a letter, number, and special character",
+      ),
+      {
+        status: 400,
+      },
+    );
   }
 
   const phoneNormalized = normalizePhone(params.phone);
   const existingPhone = await Entrant.findOne({ phoneNormalized });
-  const existingEmail = await Entrant.findOne({ email: params.email.toLowerCase() });
+  const existingEmail = await Entrant.findOne({
+    email: params.email.toLowerCase(),
+  });
 
   if (existingEmail && existingEmail.hasAccount) {
-    throw Object.assign(new Error('An account with this email already exists'), { status: 409 });
+    throw Object.assign(
+      new Error("An account with this email already exists"),
+      { status: 409 },
+    );
   }
   if (existingPhone && existingPhone.hasAccount) {
-    throw Object.assign(new Error('An account with this phone already exists'), { status: 409 });
+    throw Object.assign(
+      new Error("An account with this phone already exists"),
+      { status: 409 },
+    );
   }
 
   const passwordHash = await bcrypt.hash(params.password, 10);
@@ -65,8 +92,17 @@ export const registerEntrant = async (params: {
 
   let entrant = existingPhone || existingEmail;
   if (entrant) {
-    if (existingEmail && existingPhone && String(existingEmail._id) !== String(existingPhone._id)) {
-      throw Object.assign(new Error('Email and phone belong to different entries. Contact support.'), { status: 409 });
+    if (
+      existingEmail &&
+      existingPhone &&
+      String(existingEmail._id) !== String(existingPhone._id)
+    ) {
+      throw Object.assign(
+        new Error(
+          "Email and phone belong to different entries. Contact support.",
+        ),
+        { status: 409 },
+      );
     }
     entrant.fullName = params.fullName.trim();
     entrant.email = params.email.toLowerCase();
@@ -93,13 +129,17 @@ export const registerEntrant = async (params: {
       isVerified: false,
       verificationOTP: otp,
       verificationOTPExpiry: otpExpiry,
-      role: 'user',
+      role: "user",
     });
   }
 
   const otpMail = await sendOTPEmail(entrant.email!, otp, entrant.fullName);
   const welcomeMail = await sendWelcomeEmail(entrant.email!, entrant.fullName);
-  await writeAudit({ action: 'account_registered', actor: entrant._id, actorType: 'entrant' });
+  await writeAudit({
+    action: "account_registered",
+    actor: entrant._id,
+    actorType: "entrant",
+  });
   return {
     requiresVerification: true,
     email: entrant.email,
@@ -117,33 +157,52 @@ export const createOptionalAccount = async (params: {
   accountSetupToken?: string;
 }) => {
   const entrant = await Entrant.findById(params.entrantId);
-  if (!entrant) throw Object.assign(new Error('Entrant not found'), { status: 404 });
-  if (!entrant.isActive) throw Object.assign(new Error('Account is blocked'), { status: 403 });
+  if (!entrant)
+    throw Object.assign(new Error("Entrant not found"), { status: 404 });
+  if (!entrant.isActive)
+    throw Object.assign(new Error("Account is blocked"), { status: 403 });
   if (
     !params.accountSetupToken ||
     entrant.accountSetupToken !== params.accountSetupToken ||
     !entrant.accountSetupTokenExpiry ||
     entrant.accountSetupTokenExpiry < new Date()
   ) {
-    throw Object.assign(new Error('Account setup session expired. Submit a code again to create an account.'), {
-      status: 400,
-    });
+    throw Object.assign(
+      new Error(
+        "Account setup session expired. Submit a code again to create an account.",
+      ),
+      {
+        status: 400,
+      },
+    );
   }
   if (!validatePassword(params.password)) {
-    throw Object.assign(new Error('Password must be 8+ chars with a letter, number, and special character'), {
-      status: 400,
-    });
+    throw Object.assign(
+      new Error(
+        "Password must be 8+ chars with a letter, number, and special character",
+      ),
+      {
+        status: 400,
+      },
+    );
   }
 
   if (params.email) {
-    if (!validateEmail(params.email)) throw Object.assign(new Error('Invalid email'), { status: 400 });
-    const existing = await Entrant.findOne({ email: params.email.toLowerCase(), _id: { $ne: entrant._id } });
-    if (existing) throw Object.assign(new Error('Email already in use'), { status: 409 });
+    if (!validateEmail(params.email))
+      throw Object.assign(new Error("Invalid email"), { status: 400 });
+    const existing = await Entrant.findOne({
+      email: params.email.toLowerCase(),
+      _id: { $ne: entrant._id },
+    });
+    if (existing)
+      throw Object.assign(new Error("Email already in use"), { status: 409 });
     entrant.email = params.email.toLowerCase();
   }
 
   if (!entrant.email) {
-    throw Object.assign(new Error('Email is required to create an account'), { status: 400 });
+    throw Object.assign(new Error("Email is required to create an account"), {
+      status: 400,
+    });
   }
 
   entrant.passwordHash = await bcrypt.hash(params.password, 10);
@@ -158,7 +217,11 @@ export const createOptionalAccount = async (params: {
   await entrant.save();
   const otpMail = await sendOTPEmail(entrant.email, otp, entrant.fullName);
   const welcomeMail = await sendWelcomeEmail(entrant.email, entrant.fullName);
-  await writeAudit({ action: 'optional_account_created', actor: entrant._id, actorType: 'entrant' });
+  await writeAudit({
+    action: "optional_account_created",
+    actor: entrant._id,
+    actorType: "entrant",
+  });
 
   return {
     requiresVerification: true,
@@ -173,31 +236,37 @@ export const createOptionalAccount = async (params: {
 export const verifyOtp = async (email: string, otp: string) => {
   const entrant = await Entrant.findOne({ email: email.toLowerCase() });
   if (!entrant || !entrant.verificationOTP) {
-    throw Object.assign(new Error('Invalid verification request'), { status: 400 });
+    throw Object.assign(new Error("Invalid verification request"), {
+      status: 400,
+    });
   }
-  if (!entrant.verificationOTPExpiry || entrant.verificationOTPExpiry < new Date()) {
-    throw Object.assign(new Error('OTP expired'), { status: 400 });
+  if (
+    !entrant.verificationOTPExpiry ||
+    entrant.verificationOTPExpiry < new Date()
+  ) {
+    throw Object.assign(new Error("OTP expired"), { status: 400 });
   }
   if (entrant.verificationOTP !== otp) {
-    throw Object.assign(new Error('Invalid OTP'), { status: 400 });
+    throw Object.assign(new Error("Invalid OTP"), { status: 400 });
   }
   entrant.isVerified = true;
   entrant.verificationOTP = undefined;
   entrant.verificationOTPExpiry = null;
   await entrant.save();
-  return { message: 'Email verified. You can sign in now.' };
+  return { message: "Email verified. You can sign in now." };
 };
 
 export const resendOtp = async (email: string) => {
   const entrant = await Entrant.findOne({ email: email.toLowerCase() });
-  if (!entrant || !entrant.email) throw Object.assign(new Error('Account not found'), { status: 404 });
+  if (!entrant || !entrant.email)
+    throw Object.assign(new Error("Account not found"), { status: 404 });
   const otp = generateOTP();
   entrant.verificationOTP = otp;
   entrant.verificationOTPExpiry = new Date(Date.now() + 10 * 60 * 1000);
   await entrant.save();
   const mail = await sendOTPEmail(entrant.email, otp, entrant.fullName);
   return {
-    message: mail.sent ? 'OTP resent' : 'OTP generated (email not configured)',
+    message: mail.sent ? "OTP resent" : "OTP generated (email not configured)",
     emailSent: mail.sent,
     ...(mail.sent ? {} : { devOtp: otp }),
   };
@@ -205,41 +274,62 @@ export const resendOtp = async (email: string) => {
 
 export const loginEntrant = async (identifier: string, password: string) => {
   const normalizedPhone = normalizePhone(identifier);
-  const query = identifier.includes('@')
+  const query = identifier.includes("@")
     ? { email: identifier.toLowerCase() }
-    : { $or: [{ phoneNormalized: normalizedPhone }, { email: identifier.toLowerCase() }] };
+    : {
+        $or: [
+          { phoneNormalized: normalizedPhone },
+          { email: identifier.toLowerCase() },
+        ],
+      };
 
   const entrant = await Entrant.findOne(query);
   if (!entrant || !entrant.passwordHash || !entrant.hasAccount) {
-    throw Object.assign(new Error('Invalid credentials'), { status: 401 });
+    throw Object.assign(new Error("Invalid credentials"), { status: 401 });
   }
-  if (!entrant.isActive) throw Object.assign(new Error('Account is blocked'), { status: 403 });
-  if (!entrant.isVerified) throw Object.assign(new Error('Please verify your email first'), { status: 403 });
+  if (!entrant.isActive)
+    throw Object.assign(new Error("Account is blocked"), { status: 403 });
+  if (!entrant.isVerified)
+    throw Object.assign(new Error("Please verify your email first"), {
+      status: 403,
+    });
 
   const ok = await bcrypt.compare(password, entrant.passwordHash);
-  if (!ok) throw Object.assign(new Error('Invalid credentials'), { status: 401 });
+  if (!ok)
+    throw Object.assign(new Error("Invalid credentials"), { status: 401 });
 
-  const token = signToken(entrant._id.toString(), entrant.role, entrant.fullName);
+  const token = signToken(
+    entrant._id.toString(),
+    entrant.role,
+    entrant.fullName,
+  );
   return { token, user: publicEntrant(entrant) };
 };
 
 export const loginAdmin = async (identifier: string, password: string) => {
   const result = await loginEntrant(identifier, password);
-  if (result.user.role !== 'admin') {
-    throw Object.assign(new Error('Admin access required'), { status: 403 });
+  if (result.user.role !== "admin") {
+    throw Object.assign(new Error("Admin access required"), { status: 403 });
   }
   return result;
 };
 
 export const requestPasswordReset = async (email: string) => {
-  const normalized = String(email || '').trim().toLowerCase();
-  if (!normalized || !normalized.includes('@')) {
-    throw Object.assign(new Error('Enter a valid email address'), { status: 400 });
+  const normalized = String(email || "")
+    .trim()
+    .toLowerCase();
+  if (!normalized || !normalized.includes("@")) {
+    throw Object.assign(new Error("Enter a valid email address"), {
+      status: 400,
+    });
   }
 
-  const entrant = await Entrant.findOne({ email: normalized, hasAccount: true });
+  const entrant = await Entrant.findOne({
+    email: normalized,
+    hasAccount: true,
+  });
   const generic = {
-    message: 'If that email exists, a reset code was sent.',
+    message: "If that email exists, a reset code was sent.",
     emailSent: false as boolean,
   };
 
@@ -250,36 +340,49 @@ export const requestPasswordReset = async (email: string) => {
   entrant.resetTokenExpiry = new Date(Date.now() + 10 * 60 * 1000);
   await entrant.save();
 
-  const mail = await sendPasswordResetOtpEmail(entrant.email, otp, entrant.fullName);
+  const mail = await sendPasswordResetOtpEmail(
+    entrant.email,
+    otp,
+    entrant.fullName,
+  );
 
   return {
     message: mail.sent
-      ? 'If that email exists, a reset code was sent.'
-      : 'Reset code generated (email delivery unavailable).',
+      ? "If that email exists, a reset code was sent."
+      : "Reset code generated (email delivery unavailable).",
     emailSent: mail.sent,
     ...(mail.sent ? {} : { devOtp: otp }),
   };
 };
 
 export const verifyResetOtp = async (email: string, otp: string) => {
-  const normalized = String(email || '').trim().toLowerCase();
-  const code = String(otp || '').trim();
+  const normalized = String(email || "")
+    .trim()
+    .toLowerCase();
+  const code = String(otp || "").trim();
   if (!normalized || !code) {
-    throw Object.assign(new Error('Email and code are required'), { status: 400 });
+    throw Object.assign(new Error("Email and code are required"), {
+      status: 400,
+    });
   }
 
-  const entrant = await Entrant.findOne({ email: normalized, hasAccount: true });
+  const entrant = await Entrant.findOne({
+    email: normalized,
+    hasAccount: true,
+  });
   if (!entrant || !entrant.resetToken) {
-    throw Object.assign(new Error('Invalid or expired code'), { status: 400 });
+    throw Object.assign(new Error("Invalid or expired code"), { status: 400 });
   }
   if (!entrant.resetTokenExpiry || entrant.resetTokenExpiry < new Date()) {
-    throw Object.assign(new Error('Code expired. Request a new one.'), { status: 400 });
+    throw Object.assign(new Error("Code expired. Request a new one."), {
+      status: 400,
+    });
   }
   if (entrant.resetToken !== code) {
-    throw Object.assign(new Error('Invalid code'), { status: 400 });
+    throw Object.assign(new Error("Invalid code"), { status: 400 });
   }
 
-  return { message: 'Code verified. Set your new password.', verified: true };
+  return { message: "Code verified. Set your new password.", verified: true };
 };
 
 export const resetPassword = async (params: {
@@ -289,9 +392,14 @@ export const resetPassword = async (params: {
   password: string;
 }) => {
   if (!validatePassword(params.password)) {
-    throw Object.assign(new Error('Password must be 8+ chars with a letter, number, and special character'), {
-      status: 400,
-    });
+    throw Object.assign(
+      new Error(
+        "Password must be 8+ chars with a letter, number, and special character",
+      ),
+      {
+        status: 400,
+      },
+    );
   }
 
   let entrant: IEntrant | null = null;
@@ -310,14 +418,17 @@ export const resetPassword = async (params: {
     });
   }
 
-  if (!entrant) throw Object.assign(new Error('Invalid or expired reset code'), { status: 400 });
+  if (!entrant)
+    throw Object.assign(new Error("Invalid or expired reset code"), {
+      status: 400,
+    });
 
   entrant.passwordHash = await bcrypt.hash(params.password, 10);
   entrant.resetToken = undefined;
   entrant.resetTokenExpiry = null;
   entrant.isVerified = true;
   await entrant.save();
-  return { message: 'Password updated. You can sign in now.' };
+  return { message: "Password updated. You can sign in now." };
 };
 
 export const assertGuestIdentity = (params: {
@@ -329,20 +440,28 @@ export const assertGuestIdentity = (params: {
   isNew: boolean;
 }) => {
   if (!params.fullName || !validateName(params.fullName)) {
-    throw Object.assign(new Error('Valid full name is required'), { status: 400 });
+    throw Object.assign(new Error("Valid full name is required"), {
+      status: 400,
+    });
   }
   if (!params.phone || !validatePhone(params.phone)) {
-    throw Object.assign(new Error('Valid phone number is required'), { status: 400 });
+    throw Object.assign(new Error("Valid phone number is required"), {
+      status: 400,
+    });
   }
   if (params.email && !validateEmail(params.email)) {
-    throw Object.assign(new Error('Invalid email'), { status: 400 });
+    throw Object.assign(new Error("Invalid email"), { status: 400 });
   }
   if (params.isNew) {
     if (!params.dateOfBirth || !isAtLeast18(params.dateOfBirth)) {
-      throw Object.assign(new Error('Entrants must be 18 or older'), { status: 400 });
+      throw Object.assign(new Error("Entrants must be 18 or older"), {
+        status: 400,
+      });
     }
     if (params.isOver18 !== true) {
-      throw Object.assign(new Error('You must confirm you are 18 or older'), { status: 400 });
+      throw Object.assign(new Error("You must confirm you are 18 or older"), {
+        status: 400,
+      });
     }
   }
 };
