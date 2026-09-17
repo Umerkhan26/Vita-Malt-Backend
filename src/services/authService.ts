@@ -4,7 +4,7 @@ import Entrant, { IEntrant } from '../models/entrant.model';
 import { getJwtSecret, validateEmail, validateName, validatePassword } from '../utils/validators';
 import { normalizePhone, validatePhone } from '../utils/phone';
 import { isAtLeast18 } from '../utils/age';
-import { generateOTP, sendOTPEmail, sendPasswordResetOtpEmail } from '../utils/emailService';
+import { generateOTP, sendOTPEmail, sendPasswordResetOtpEmail, sendWelcomeEmail } from '../utils/emailService';
 import { writeAudit } from '../utils/audit';
 
 const signToken = (userId: string, role: string, fullName: string) =>
@@ -97,13 +97,15 @@ export const registerEntrant = async (params: {
     });
   }
 
-  const mail = await sendOTPEmail(entrant.email!, otp, entrant.fullName);
+  const otpMail = await sendOTPEmail(entrant.email!, otp, entrant.fullName);
+  const welcomeMail = await sendWelcomeEmail(entrant.email!, entrant.fullName);
   await writeAudit({ action: 'account_registered', actor: entrant._id, actorType: 'entrant' });
   return {
     requiresVerification: true,
     email: entrant.email,
-    emailSent: mail.sent,
-    ...(mail.sent ? {} : { devOtp: otp }),
+    emailSent: otpMail.sent,
+    welcomeEmailSent: welcomeMail.sent,
+    ...(otpMail.sent ? {} : { devOtp: otp }),
     entrant: publicEntrant(entrant),
   };
 };
@@ -154,14 +156,16 @@ export const createOptionalAccount = async (params: {
   entrant.verificationOTPExpiry = new Date(Date.now() + 10 * 60 * 1000);
   entrant.isVerified = false;
   await entrant.save();
-  const mail = await sendOTPEmail(entrant.email, otp, entrant.fullName);
+  const otpMail = await sendOTPEmail(entrant.email, otp, entrant.fullName);
+  const welcomeMail = await sendWelcomeEmail(entrant.email, entrant.fullName);
   await writeAudit({ action: 'optional_account_created', actor: entrant._id, actorType: 'entrant' });
 
   return {
     requiresVerification: true,
     email: entrant.email,
-    emailSent: mail.sent,
-    ...(mail.sent ? {} : { devOtp: otp }),
+    emailSent: otpMail.sent,
+    welcomeEmailSent: welcomeMail.sent,
+    ...(otpMail.sent ? {} : { devOtp: otp }),
     entrant: publicEntrant(entrant),
   };
 };

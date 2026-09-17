@@ -30,6 +30,37 @@ export const generateOTP = (length: number = 6): string => {
   return otp;
 };
 
+export const buildWelcomeEmailHtml = (name: string, landingUrl: string = 'https://vitamalt.com'): string => `
+  <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f6f9f7; border-radius: 18px; overflow: hidden; border: 1px solid #dfeee6;">
+    <div style="background: linear-gradient(135deg, #006B3F 0%, #0b7d52 100%); padding: 28px 24px; text-align: center;">
+      <div style="display: inline-block; background: rgba(255,255,255,0.12); padding: 8px 14px; border-radius: 999px; color: #dff9eb; font-size: 12px; letter-spacing: 1.2px; text-transform: uppercase; font-weight: 700;">Welcome aboard</div>
+      <h1 style="margin: 18px 0 8px; color: #ffffff; font-size: 30px; line-height: 1.2;">Welcome to Vita Malt</h1>
+      <p style="margin: 0; color: #ecfdf5; font-size: 14px;">Vita Malt 2026 campaign</p>
+    </div>
+    <div style="background: #ffffff; padding: 28px 24px 20px; color: #1f2d26;">
+      <p style="margin: 0 0 12px; font-size: 18px;">Hi ${name},</p>
+      <p style="margin: 0 0 18px; font-size: 15px; line-height: 1.7; color: #2f3d35;">
+        Thank you for joining the Vita Malt experience. We’re excited to have you in the campaign and can’t wait for you to explore the latest offers, prize chances, and community moments waiting for you.
+      </p>
+      <div style="background: #eaf7f0; border: 1px solid #cfead9; border-radius: 12px; padding: 18px; margin: 20px 0;">
+        <p style="margin: 0 0 12px; font-size: 15px; color: #1b3b2d; font-weight: 600;">What happens next?</p>
+        <p style="margin: 0; font-size: 14px; line-height: 1.7; color: #355141;">
+          Start by exploring the campaign page, enter your codes, and keep an eye on your inbox for updates, winner announcements, and exclusive promotions.
+        </p>
+      </div>
+      <div style="text-align: center; margin: 28px 0 22px;">
+        <a href="${landingUrl}" style="display: inline-block; background: #F37021; color: #ffffff; text-decoration: none; padding: 14px 26px; border-radius: 999px; font-weight: 700; font-size: 15px;">Explore the campaign</a>
+      </div>
+      <p style="margin: 0; font-size: 14px; line-height: 1.7; color: #496259;">
+        Need help? Reach out to <a href="mailto:drinkvitamalt@gmail.com" style="color: #006B3F; font-weight: 600;">drinkvitamalt@gmail.com</a>
+      </p>
+    </div>
+    <div style="background: #f3faf5; padding: 18px 24px; text-align: center; border-top: 1px solid #e3efe8;">
+      <p style="margin: 0; color: #5d7168; font-size: 12px;">© 2026 Vita Malt. Good taste, great moments.</p>
+    </div>
+  </div>
+`;
+
 const wrapHtml = (title: string, body: string): string => `
   <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f3faf5;">
     <div style="background-color: #006B3F; padding: 20px; border-radius: 8px 8px 0 0; text-align: center;">
@@ -122,6 +153,20 @@ export const sendPasswordResetEmail = async (
   );
   if (!sent) {
     console.log(`[DEV RESET LINK] ${email} => ${resetUrl}`);
+  }
+  return { sent };
+};
+
+export const sendWelcomeEmail = async (email: string, name: string): Promise<{ sent: boolean }> => {
+  const text = `Hello ${name},\n\nWelcome to Vita Malt! We’re so happy you joined the campaign.\n\nStart exploring the latest offers, enter your codes, and keep an eye on your inbox for updates and prize announcements.\n\nhttps://vitamalt.com`;
+  const sent = await sendMail(
+    email,
+    'Welcome to Vita Malt',
+    text,
+    buildWelcomeEmailHtml(name, 'https://vitamalt.com')
+  );
+  if (!sent) {
+    console.log(`[DEV WELCOME] ${email} => welcome email`);
   }
   return { sent };
 };
