@@ -17,6 +17,8 @@ import {
   codeStatsHandler,
   listCodesHandler,
   submissionsHandler,
+  deleteSubmissionHandler,
+  bulkDeleteSubmissionsHandler,
   flaggedHandler,
   exportEntriesHandler,
   exportWinnersHandler,
@@ -42,6 +44,8 @@ import {
   bulkDeleteAuditHandler,
   drawPreviewHandler,
   drawEntriesHandler,
+  deleteDrawEntryHandler,
+  bulkDeleteDrawEntriesHandler,
 } from '../controllers/adminController';
 
 const storage = multer.diskStorage({
@@ -65,6 +69,8 @@ router.post('/audit/bulk-delete', bulkDeleteAuditHandler);
 router.delete('/audit/:id', deleteAuditHandler);
 router.get('/draw/preview', drawPreviewHandler);
 router.get('/draw/entries', drawEntriesHandler);
+router.post('/draw/entries/bulk-delete', bulkDeleteDrawEntriesHandler);
+router.delete('/draw/entries/:id', deleteDrawEntryHandler);
 
 router.get('/entrants', entrantsHandler);
 router.post('/entrants/bulk-delete', bulkDeleteEntrantsHandler);
@@ -78,6 +84,8 @@ router.get('/codes/stats', codeStatsHandler);
 router.get('/codes', listCodesHandler);
 router.get('/codes/flagged', flaggedHandler);
 router.get('/submissions', submissionsHandler);
+router.post('/submissions/bulk-delete', bulkDeleteSubmissionsHandler);
+router.delete('/submissions/:id', deleteSubmissionHandler);
 
 router.get('/export/entries', exportEntriesHandler);
 router.get('/export/winners', exportWinnersHandler);

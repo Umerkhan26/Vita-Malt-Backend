@@ -196,6 +196,49 @@ export const listSubmissions = async (page = 1, limit = 100, result?: string, se
   return { items, ...pageMeta(page, limit, totalCount) };
 };
 
+export const deleteSubmission = async (id: string) => {
+  const doc = await CodeSubmission.findByIdAndDelete(id);
+  if (!doc) throw Object.assign(new Error('Attempt not found'), { status: 404 });
+  return { message: 'Deleted' };
+};
+
+export const bulkDeleteSubmissions = async (ids: string[]) => {
+  const result = await CodeSubmission.deleteMany({ _id: { $in: validIds(ids) } });
+  return { deleted: result.deletedCount || 0 };
+};
+
+export const deleteDrawEntry = async (id: string) => {
+  const entry = await DrawEntry.findById(id);
+  if (!entry) throw Object.assign(new Error('Ticket not found'), { status: 404 });
+  if (entry.isWinner) throw Object.assign(new Error('Winning tickets cannot be deleted'), { status: 400 });
+  await DrawEntry.deleteOne({ _id: entry._id });
+  await Entrant.updateOne(
+    { _id: entry.entrant, drawEntryCount: { $gt: 0 } },
+    { $inc: { drawEntryCount: -1 } }
+  );
+  return { message: 'Deleted' };
+};
+
+export const bulkDeleteDrawEntries = async (ids: string[]) => {
+  const docs = await DrawEntry.find({ _id: { $in: validIds(ids) }, isWinner: { $ne: true } });
+  if (!docs.length) return { deleted: 0 };
+  const byEntrant = new Map<string, number>();
+  for (const doc of docs) {
+    const key = String(doc.entrant);
+    byEntrant.set(key, (byEntrant.get(key) || 0) + 1);
+  }
+  await DrawEntry.deleteMany({ _id: { $in: docs.map((d) => d._id) } });
+  await Promise.all(
+    [...byEntrant.entries()].map(([entrantId, count]) =>
+      Entrant.updateOne(
+        { _id: entrantId, drawEntryCount: { $gte: count } },
+        { $inc: { drawEntryCount: -count } }
+      )
+    )
+  );
+  return { deleted: docs.length };
+};
+
 export const flaggedCodes = async (page = 1, limit = 100, search = '', kind = '') => {
   const filter: Record<string, unknown> =
     kind === 'flagged'

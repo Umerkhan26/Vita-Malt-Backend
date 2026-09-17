@@ -113,6 +113,22 @@ export const submissionsHandler = async (req: AuthRequest, res: Response) => {
   }
 };
 
+export const deleteSubmissionHandler = async (req: AuthRequest, res: Response) => {
+  try {
+    res.json(await adminService.deleteSubmission(param(req.params.id)));
+  } catch (error) {
+    handleError(res, error);
+  }
+};
+
+export const bulkDeleteSubmissionsHandler = async (req: AuthRequest, res: Response) => {
+  try {
+    res.json(await adminService.bulkDeleteSubmissions(bodyIds(req)));
+  } catch (error) {
+    handleError(res, error);
+  }
+};
+
 export const flaggedHandler = async (req: AuthRequest, res: Response) => {
   try {
     res.json(
@@ -371,6 +387,22 @@ export const drawEntriesHandler = async (req: AuthRequest, res: Response) => {
         String(req.query.winner || '')
       )
     );
+  } catch (error) {
+    handleError(res, error);
+  }
+};
+
+export const deleteDrawEntryHandler = async (req: AuthRequest, res: Response) => {
+  try {
+    res.json(await adminService.deleteDrawEntry(param(req.params.id)));
+  } catch (error) {
+    handleError(res, error);
+  }
+};
+
+export const bulkDeleteDrawEntriesHandler = async (req: AuthRequest, res: Response) => {
+  try {
+    res.json(await adminService.bulkDeleteDrawEntries(bodyIds(req)));
   } catch (error) {
     handleError(res, error);
   }
