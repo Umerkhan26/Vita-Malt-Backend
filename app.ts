@@ -28,8 +28,16 @@ app.use(express.json({ limit: '1mb' }));
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 app.use((req: Request, res: Response, next: NextFunction): void => {
-  const allowedOrigin = process.env.FRONT_END_URL || 'http://localhost:5173';
-  res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
+  const allowed = String(process.env.FRONT_END_URL || 'http://localhost:5173')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const origin = String(req.headers.origin || '');
+  if (origin && allowed.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  } else if (allowed[0]) {
+    res.setHeader('Access-Control-Allow-Origin', allowed[0]);
+  }
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Max-Age', '1800');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');

@@ -4,6 +4,7 @@ import SocialPost from '../models/socialPost.model';
 import ContactMessage from '../models/contactMessage.model';
 import { sendMail } from '../utils/emailService';
 import { validateEmail, validateName } from '../utils/validators';
+import { fetchLinkPreview, isShareStyleUrl, resolvePublicPostUrl } from '../utils/socialUrl';
 
 export const publicWinners = async (_req: Request, res: Response) => {
   const winners = await Winner.find({ status: 'published' }).sort({ announcedAt: -1, createdAt: -1 });
@@ -16,7 +17,28 @@ export const publicWinners = async (_req: Request, res: Response) => {
 
 export const publicSocial = async (_req: Request, res: Response) => {
   const posts = await SocialPost.find({ isActive: true }).sort({ sortOrder: 1, createdAt: -1 });
-  res.json({ posts });
+  const resolved = [];
+  for (const post of posts) {
+    let changed = false;
+    const url = String(post.embedUrl || '');
+    if (isShareStyleUrl(url)) {
+      const embedUrl = await resolvePublicPostUrl(url);
+      if (embedUrl && embedUrl !== url) {
+        post.embedUrl = embedUrl;
+        changed = true;
+      }
+    }
+    if (!post.previewImage || !String(post.previewImage).startsWith('/uploads/')) {
+      const preview = await fetchLinkPreview(String(post.embedUrl), String(post.platform));
+      if (preview.previewTitle) post.previewTitle = preview.previewTitle;
+      if (preview.previewDescription) post.previewDescription = preview.previewDescription;
+      if (preview.previewImage) post.previewImage = preview.previewImage;
+      changed = changed || Boolean(preview.previewTitle || preview.previewDescription || preview.previewImage);
+    }
+    if (changed) await post.save();
+    resolved.push(post);
+  }
+  res.json({ posts: resolved });
 };
 
 export const contactHandler = async (req: Request, res: Response) => {

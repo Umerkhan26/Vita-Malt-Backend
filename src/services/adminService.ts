@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import mongoose from 'mongoose';
 import Entrant from '../models/entrant.model';
 import CampaignCode from '../models/campaignCode.model';
 import CodeSubmission from '../models/codeSubmission.model';
@@ -9,6 +10,10 @@ import ContactMessage from '../models/contactMessage.model';
 import SocialPost from '../models/socialPost.model';
 import AuditLog from '../models/auditLog.model';
 import { writeAudit } from '../utils/audit';
+import { fetchLinkPreview, resolvePublicPostUrl } from '../utils/socialUrl';
+
+const validIds = (ids: unknown) =>
+  [...new Set((Array.isArray(ids) ? ids : []).map(String).filter((id) => mongoose.isValidObjectId(id)))];
 
 const pageMeta = (page: number, limit: number, totalCount: number) => ({
   page,
@@ -100,6 +105,19 @@ export const deleteEntrantKeepCodes = async (entrantId: string, adminId: string)
     metadata: { entrantId },
   });
   return { message: 'Entrant deleted. Redeemed codes remain used and are not recycled.' };
+};
+
+export const bulkDeleteEntrants = async (ids: string[], adminId: string) => {
+  let deleted = 0;
+  for (const id of validIds(ids)) {
+    try {
+      await deleteEntrantKeepCodes(id, adminId);
+      deleted += 1;
+    } catch {
+      /* skip missing or admin rows */
+    }
+  }
+  return { deleted };
 };
 
 export const importCodes = async (rawCodes: string[], batch: string, adminId: string) => {
@@ -342,6 +360,30 @@ export const listContactMessages = async (page = 1, limit = 100, search = '', un
 export const markContactRead = async (id: string) =>
   ContactMessage.findByIdAndUpdate(id, { isRead: true }, { new: true });
 
+export const deleteContactMessage = async (id: string, adminId: string) => {
+  const doc = await ContactMessage.findByIdAndDelete(id);
+  if (!doc) throw Object.assign(new Error('Message not found'), { status: 404 });
+  await writeAudit({
+    action: 'contact_deleted',
+    actor: adminId,
+    actorType: 'admin',
+    metadata: { contactId: id },
+  });
+  return { message: 'Deleted' };
+};
+
+export const bulkDeleteContact = async (ids: string[], adminId: string) => {
+  const valid = validIds(ids);
+  const result = await ContactMessage.deleteMany({ _id: { $in: valid } });
+  await writeAudit({
+    action: 'contact_bulk_deleted',
+    actor: adminId,
+    actorType: 'admin',
+    metadata: { deleted: result.deletedCount },
+  });
+  return { deleted: result.deletedCount || 0 };
+};
+
 export const listSocialPostsAdmin = async (page = 1, limit = 100, search = '', platform = '') => {
   const filter: Record<string, unknown> = {};
   if (platform) filter.platform = platform;
@@ -360,17 +402,55 @@ export const listSocialPostsAdmin = async (page = 1, limit = 100, search = '', p
   return { items, ...pageMeta(page, limit, totalCount) };
 };
 
+const detectSocialPlatform = (url: string): 'instagram' | 'facebook' | 'tiktok' | 'other' => {
+  const u = url.toLowerCase();
+  if (u.includes('instagram.com') || u.includes('instagr.am')) return 'instagram';
+  if (u.includes('facebook.com') || u.includes('fb.watch') || u.includes('fb.com')) return 'facebook';
+  if (u.includes('tiktok.com')) return 'tiktok';
+  return 'other';
+};
+
 export const createSocialPost = async (payload: {
-  platform: 'instagram' | 'facebook' | 'tiktok' | 'other';
+  platform?: 'instagram' | 'facebook' | 'tiktok' | 'other';
   embedUrl: string;
   caption?: string;
   sortOrder?: number;
-}) => SocialPost.create(payload);
+}) => {
+  const rawUrl = String(payload.embedUrl || '').trim();
+  if (!rawUrl) throw Object.assign(new Error('URL required'), { status: 400 });
+  const embedUrl = await resolvePublicPostUrl(rawUrl);
+  const platform = detectSocialPlatform(embedUrl);
+  const preview = await fetchLinkPreview(embedUrl, platform);
+  return SocialPost.create({
+    platform,
+    embedUrl,
+    caption: payload.caption ? String(payload.caption).trim() : undefined,
+    ...preview,
+    sortOrder: payload.sortOrder ?? 0,
+    isActive: true,
+  });
+};
 
 export const updateSocialPost = async (id: string, payload: Record<string, unknown>) =>
   SocialPost.findByIdAndUpdate(id, payload, { new: true });
 
 export const deleteSocialPost = async (id: string) => SocialPost.findByIdAndDelete(id);
+
+export const bulkDeleteSocial = async (ids: string[]) => {
+  const result = await SocialPost.deleteMany({ _id: { $in: validIds(ids) } });
+  return { deleted: result.deletedCount || 0 };
+};
+
+export const deleteAuditLog = async (id: string) => {
+  const doc = await AuditLog.findByIdAndDelete(id);
+  if (!doc) throw Object.assign(new Error('Event not found'), { status: 404 });
+  return { message: 'Deleted' };
+};
+
+export const bulkDeleteAudit = async (ids: string[]) => {
+  const result = await AuditLog.deleteMany({ _id: { $in: validIds(ids) } });
+  return { deleted: result.deletedCount || 0 };
+};
 
 export const saveUpload = (file: Express.Multer.File): string => {
   const rel = `/uploads/${file.filename}`;

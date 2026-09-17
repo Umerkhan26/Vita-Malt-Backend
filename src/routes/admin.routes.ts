@@ -12,6 +12,7 @@ import {
   blockHandler,
   unblockHandler,
   deleteEntrantHandler,
+  bulkDeleteEntrantsHandler,
   importCodesHandler,
   codeStatsHandler,
   listCodesHandler,
@@ -28,12 +29,17 @@ import {
   winnerActionHandler,
   contactListHandler,
   contactReadHandler,
+  deleteContactHandler,
+  bulkDeleteContactHandler,
   socialListHandler,
   socialCreateHandler,
   socialUpdateHandler,
   socialDeleteHandler,
+  bulkDeleteSocialHandler,
   overviewHandler,
   auditHandler,
+  deleteAuditHandler,
+  bulkDeleteAuditHandler,
   drawPreviewHandler,
   drawEntriesHandler,
 } from '../controllers/adminController';
@@ -55,10 +61,13 @@ router.use(adminMiddleware);
 
 router.get('/overview', overviewHandler);
 router.get('/audit', auditHandler);
+router.post('/audit/bulk-delete', bulkDeleteAuditHandler);
+router.delete('/audit/:id', deleteAuditHandler);
 router.get('/draw/preview', drawPreviewHandler);
 router.get('/draw/entries', drawEntriesHandler);
 
 router.get('/entrants', entrantsHandler);
+router.post('/entrants/bulk-delete', bulkDeleteEntrantsHandler);
 router.get('/entrants/:entrantId', entrantDetailHandler);
 router.patch('/entrants/:entrantId/block', blockHandler);
 router.patch('/entrants/:entrantId/unblock', unblockHandler);
@@ -82,10 +91,13 @@ router.post('/winners/:winnerId/action', winnerActionHandler);
 router.post('/draw/run', runDrawHandler);
 
 router.get('/contact', contactListHandler);
+router.post('/contact/bulk-delete', bulkDeleteContactHandler);
 router.patch('/contact/:id/read', contactReadHandler);
+router.delete('/contact/:id', deleteContactHandler);
 
 router.get('/social', socialListHandler);
 router.post('/social', socialCreateHandler);
+router.post('/social/bulk-delete', bulkDeleteSocialHandler);
 router.patch('/social/:id', socialUpdateHandler);
 router.delete('/social/:id', socialDeleteHandler);
 

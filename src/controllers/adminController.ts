@@ -17,6 +17,8 @@ const pageLimit = (req: AuthRequest, fallback = 100) => {
 
 const param = (value: string | string[] | undefined): string => (Array.isArray(value) ? value[0] : value || '');
 
+const bodyIds = (req: AuthRequest) => (Array.isArray(req.body?.ids) ? req.body.ids.map(String) : []);
+
 export const entrantsHandler = async (req: AuthRequest, res: Response) => {
   try {
     const page = Number(req.query.page) || 1;
@@ -59,6 +61,14 @@ export const unblockHandler = async (req: AuthRequest, res: Response) => {
 export const deleteEntrantHandler = async (req: AuthRequest, res: Response) => {
   try {
     res.json(await adminService.deleteEntrantKeepCodes(param(req.params.entrantId), req.userId!));
+  } catch (error) {
+    handleError(res, error);
+  }
+};
+
+export const bulkDeleteEntrantsHandler = async (req: AuthRequest, res: Response) => {
+  try {
+    res.json(await adminService.bulkDeleteEntrants(bodyIds(req), req.userId!));
   } catch (error) {
     handleError(res, error);
   }
@@ -240,6 +250,22 @@ export const contactReadHandler = async (req: AuthRequest, res: Response) => {
   }
 };
 
+export const deleteContactHandler = async (req: AuthRequest, res: Response) => {
+  try {
+    res.json(await adminService.deleteContactMessage(param(req.params.id), req.userId!));
+  } catch (error) {
+    handleError(res, error);
+  }
+};
+
+export const bulkDeleteContactHandler = async (req: AuthRequest, res: Response) => {
+  try {
+    res.json(await adminService.bulkDeleteContact(bodyIds(req), req.userId!));
+  } catch (error) {
+    handleError(res, error);
+  }
+};
+
 export const socialListHandler = async (req: AuthRequest, res: Response) => {
   try {
     res.json(
@@ -280,6 +306,14 @@ export const socialDeleteHandler = async (req: AuthRequest, res: Response) => {
   }
 };
 
+export const bulkDeleteSocialHandler = async (req: AuthRequest, res: Response) => {
+  try {
+    res.json(await adminService.bulkDeleteSocial(bodyIds(req)));
+  } catch (error) {
+    handleError(res, error);
+  }
+};
+
 export const overviewHandler = async (_req: AuthRequest, res: Response) => {
   try {
     res.json(await adminService.overviewStats());
@@ -298,6 +332,22 @@ export const auditHandler = async (req: AuthRequest, res: Response) => {
         String(req.query.actorType || '')
       )
     );
+  } catch (error) {
+    handleError(res, error);
+  }
+};
+
+export const deleteAuditHandler = async (req: AuthRequest, res: Response) => {
+  try {
+    res.json(await adminService.deleteAuditLog(param(req.params.id)));
+  } catch (error) {
+    handleError(res, error);
+  }
+};
+
+export const bulkDeleteAuditHandler = async (req: AuthRequest, res: Response) => {
+  try {
+    res.json(await adminService.bulkDeleteAudit(bodyIds(req)));
   } catch (error) {
     handleError(res, error);
   }
