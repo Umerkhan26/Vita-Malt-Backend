@@ -134,7 +134,6 @@ export const registerEntrant = async (params: {
   }
 
   const otpMail = await sendOTPEmail(entrant.email!, otp, entrant.fullName);
-  const welcomeMail = await sendWelcomeEmail(entrant.email!, entrant.fullName);
   await writeAudit({
     action: "account_registered",
     actor: entrant._id,
@@ -144,7 +143,7 @@ export const registerEntrant = async (params: {
     requiresVerification: true,
     email: entrant.email,
     emailSent: otpMail.sent,
-    welcomeEmailSent: welcomeMail.sent,
+    welcomeEmailSent: false,
     ...(otpMail.sent ? {} : { devOtp: otp }),
     entrant: publicEntrant(entrant),
   };
@@ -216,7 +215,6 @@ export const createOptionalAccount = async (params: {
   entrant.isVerified = false;
   await entrant.save();
   const otpMail = await sendOTPEmail(entrant.email, otp, entrant.fullName);
-  const welcomeMail = await sendWelcomeEmail(entrant.email, entrant.fullName);
   await writeAudit({
     action: "optional_account_created",
     actor: entrant._id,
@@ -227,7 +225,7 @@ export const createOptionalAccount = async (params: {
     requiresVerification: true,
     email: entrant.email,
     emailSent: otpMail.sent,
-    welcomeEmailSent: welcomeMail.sent,
+    welcomeEmailSent: false,
     ...(otpMail.sent ? {} : { devOtp: otp }),
     entrant: publicEntrant(entrant),
   };
@@ -253,7 +251,18 @@ export const verifyOtp = async (email: string, otp: string) => {
   entrant.verificationOTP = undefined;
   entrant.verificationOTPExpiry = null;
   await entrant.save();
-  return { message: "Email verified. You can sign in now." };
+
+  if (!entrant.email) {
+    throw Object.assign(new Error("Email is missing for this account"), {
+      status: 400,
+    });
+  }
+
+  const welcomeMail = await sendWelcomeEmail(entrant.email, entrant.fullName);
+  return {
+    message: "Email verified. You can sign in now.",
+    welcomeEmailSent: welcomeMail.sent,
+  };
 };
 
 export const resendOtp = async (email: string) => {
