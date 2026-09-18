@@ -216,7 +216,8 @@ export const sendWelcomeEmail = async (
   email: string,
   name: string,
 ): Promise<{ sent: boolean }> => {
-  const campaignUrl = process.env.CAMPAIGN_URL || "https://www.vitamaltpromotionssvg.com/";
+  const campaignUrl =
+    process.env.CAMPAIGN_URL || "https://www.vitamaltpromotionssvg.com/";
   const text = `Hello ${name},\n\nWelcome to Vita Malt! We’re so happy you joined the campaign.\n\nStart exploring the latest offers, enter your codes, and keep an eye on your inbox for updates and prize announcements.\n\n${campaignUrl}`;
   const logoAttachment = getLogoAttachment();
   const sent = await sendMail(
