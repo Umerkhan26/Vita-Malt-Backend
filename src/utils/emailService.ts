@@ -63,7 +63,7 @@ export const generateOTP = (length: number = 6): string => {
 
 export const buildWelcomeEmailHtml = (
   name: string,
-  landingUrl: string = "https://vitamalt.com",
+  landingUrl: string = "https://www.vitamaltpromotionssvg.com/",
 ): string => `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f6f9f7; border-radius: 18px; overflow: hidden; border: 1px solid #dfeee6;">
       <div style="background: linear-gradient(135deg, #006B3F 0%, #0b7d52 100%); padding: 26px 20px 22px; text-align: center;">
@@ -216,13 +216,14 @@ export const sendWelcomeEmail = async (
   email: string,
   name: string,
 ): Promise<{ sent: boolean }> => {
-  const text = `Hello ${name},\n\nWelcome to Vita Malt! We’re so happy you joined the campaign.\n\nStart exploring the latest offers, enter your codes, and keep an eye on your inbox for updates and prize announcements.\n\nhttps://vitamalt.com`;
+  const campaignUrl = process.env.CAMPAIGN_URL || "https://www.vitamaltpromotionssvg.com/";
+  const text = `Hello ${name},\n\nWelcome to Vita Malt! We’re so happy you joined the campaign.\n\nStart exploring the latest offers, enter your codes, and keep an eye on your inbox for updates and prize announcements.\n\n${campaignUrl}`;
   const logoAttachment = getLogoAttachment();
   const sent = await sendMail(
     email,
     "Welcome to Vita Malt",
     text,
-    buildWelcomeEmailHtml(name, "https://vitamalt.com"),
+    buildWelcomeEmailHtml(name, campaignUrl),
     logoAttachment ? [logoAttachment] : [],
   );
   if (!sent) {
