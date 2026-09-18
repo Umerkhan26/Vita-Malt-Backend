@@ -27,7 +27,11 @@ const getTransporter = () =>
 const fromAddress = () =>
   process.env.EMAIL_FROM || process.env.SMTP_FROM || smtpUser();
 
-const getLogoAttachment = (): { filename: string; path: string; cid: string } | null => {
+const getLogoAttachment = (): {
+  filename: string;
+  path: string;
+  cid: string;
+} | null => {
   const candidates = [
     path.resolve(process.cwd(), "../frontend/public/logo.png"),
     path.resolve(process.cwd(), "frontend/public/logo.png"),
