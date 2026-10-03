@@ -53,6 +53,7 @@ const EntrantSchema = new Schema<IEntrant>(
 );
 
 EntrantSchema.index({ fullName: 1, phoneNormalized: 1 });
+EntrantSchema.index({ role: 1, validCodeCount: -1, drawEntryCount: -1, created_at: -1 });
 
 const Entrant = mongoose.model<IEntrant>('Entrant', EntrantSchema);
 export default Entrant;

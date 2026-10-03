@@ -273,8 +273,41 @@ export const lookupEntries = async (params: { fullName?: string; phone?: string;
   };
 };
 
+type LeaderRow = { id: string; rank: number; name: string; codes: number; entries: number };
+
+const LEADERBOARD_TTL_MS = 60_000;
+let leaderboardCache: { rows: LeaderRow[]; expires: number } | null = null;
+
+const shortName = (fullName: string): string => {
+  const parts = fullName.trim().split(/\s+/);
+  return parts.length > 1 ? `${parts[0]} ${parts[parts.length - 1][0]}.` : parts[0];
+};
+
+const getTopLeaderboard = async (): Promise<LeaderRow[]> => {
+  if (leaderboardCache && leaderboardCache.expires > Date.now()) return leaderboardCache.rows;
+  const top = await Entrant.find({ role: 'user', isActive: true, validCodeCount: { $gt: 0 } })
+    .sort({ validCodeCount: -1, drawEntryCount: -1, created_at: -1 })
+    .limit(10)
+    .select('fullName validCodeCount drawEntryCount')
+    .lean();
+  const rows = top.map((e, i) => ({
+    id: String(e._id),
+    rank: i + 1,
+    name: shortName(e.fullName),
+    codes: e.validCodeCount,
+    entries: e.drawEntryCount,
+  }));
+  leaderboardCache = { rows, expires: Date.now() + LEADERBOARD_TTL_MS };
+  return rows;
+};
+
 export const getDashboard = async (userId: string) => {
   const entrant = await Entrant.findById(userId);
   if (!entrant) throw Object.assign(new Error('Entrant not found'), { status: 404 });
-  return lookupEntries({ phone: entrant.phone, fullName: entrant.fullName });
+  const [result, top] = await Promise.all([
+    lookupEntries({ phone: entrant.phone, fullName: entrant.fullName }),
+    getTopLeaderboard(),
+  ]);
+  const leaderboard = top.map(({ id, ...row }) => ({ ...row, isMe: id === userId }));
+  return { ...result, leaderboard };
 };
