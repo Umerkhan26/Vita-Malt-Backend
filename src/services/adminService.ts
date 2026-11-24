@@ -558,7 +558,7 @@ export const overviewStats = async () => {
   ]);
 
   const start = process.env.CAMPAIGN_START || '2026-09-18';
-  const end = process.env.CAMPAIGN_END || '2026-11-20';
+  const end = process.env.CAMPAIGN_END || '2026-12-01';
   const usedPercent = codes ? Math.round((usedCodes / codes) * 1000) / 10 : 0;
 
   return {

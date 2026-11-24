@@ -113,10 +113,10 @@ const bulkStats = (err: unknown, chunkLen: number) => {
     code?: number;
     insertedDocs?: unknown[];
     result?: { nInserted?: number; insertedCount?: number };
-    writeErrors?: Array<{ code?: number; errmsg?: string; index?: number }>;
+    writeErrors?: Array<{ code?: number; errmsg?: string; index?: number; err?: { code?: number; errmsg?: string } }>;
   };
   const inserted = e.insertedDocs?.length ?? e.result?.nInserted ?? e.result?.insertedCount ?? 0;
-  const writeErrors = e.writeErrors ?? [];
+  const writeErrors = (e.writeErrors ?? []).map((w) => ({ ...w, code: w.code ?? w.err?.code, errmsg: w.errmsg ?? w.err?.errmsg }));
   const dupes = writeErrors.filter((w) => w.code === 11000).length;
   const other = writeErrors.filter((w) => w.code !== 11000);
   return {
@@ -191,8 +191,16 @@ Examples:
   console.log(`\nDB currently has ${existing} CampaignCode rows`);
 
   if (args.dryRun) {
+    let alreadyInDb = 0;
+    for (let i = 0; i < codes.length; i += args.batchSize) {
+      const chunk = codes.slice(i, i + args.batchSize);
+      alreadyInDb += await CampaignCode.countDocuments({ code: { $in: chunk } });
+    }
+    const newCodes = codes.length - alreadyInDb;
     const steps = Math.ceil(codes.length / args.batchSize);
-    console.log(`Would import ${codes.length} unique codes in ${steps} steps of ${args.batchSize}.`);
+    console.log(`Already in DB (will be skipped): ${alreadyInDb}`);
+    console.log(`New codes (will be inserted):    ${newCodes}`);
+    console.log(`Would process ${codes.length} unique codes in ${steps} steps of ${args.batchSize}.`);
     console.log('No writes performed.');
     await mongoose.disconnect();
     return;
@@ -222,7 +230,20 @@ Examples:
     if (!chunk.length) break;
     step += 1;
 
-    const docs = chunk.map((code) => ({
+    const existingDocs = await CampaignCode.find({ code: { $in: chunk } }).select('code').lean();
+    const existingSet = new Set(existingDocs.map((d) => d.code));
+    const newCodes = chunk.filter((code) => !existingSet.has(code));
+
+    if (!newCodes.length) {
+      totalSkipped += chunk.length;
+      index = sliceEnd;
+      saveProgress(abs, index, codes.length);
+      console.log(`Step ${step}: +0 inserted, ${chunk.length} skipped/dupes | ${index}/${codes.length} (${((index / codes.length) * 100).toFixed(1)}%)`);
+      if (args.once) break;
+      continue;
+    }
+
+    const docs = newCodes.map((code) => ({
       code,
       status: 'unused' as const,
       sourceBatch: args.batchName,
@@ -234,10 +255,11 @@ Examples:
     try {
       const result = await CampaignCode.insertMany(docs, { ordered: false });
       inserted = result.length;
+      skipped = chunk.length - inserted;
     } catch (err: unknown) {
-      const stats = bulkStats(err, chunk.length);
+      const stats = bulkStats(err, newCodes.length);
       inserted = stats.inserted;
-      skipped = stats.skipped;
+      skipped = existingSet.size + stats.skipped;
       if (stats.other.length) {
         const detail = stats.other
           .slice(0, 3)
